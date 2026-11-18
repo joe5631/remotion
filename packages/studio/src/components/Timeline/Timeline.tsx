@@ -31,6 +31,7 @@ import {isStudioInteractivityEnabled} from '../../helpers/interactivity-enabled'
 import {useIsStill} from '../../helpers/is-current-selected-still';
 import {useCachedCompositionComponentInfo} from '../../helpers/open-in-editor';
 import {getStudioMaxTimelineTracks} from '../../helpers/studio-runtime-config';
+import {getTimelineSelectionRevision} from '../../helpers/timeline-selection-revision';
 import {useSyncExternalStore} from '../../helpers/use-sync-external-store';
 import {callApi} from '../call-api';
 import {ContextMenu} from '../ContextMenu';
@@ -759,6 +760,12 @@ const TimelineInner: React.FC = () => {
 			return;
 		}
 
+		const {effect} = pendingInsertedElementSelection;
+		if (effect && effect.selectionRevision !== getTimelineSelectionRevision()) {
+			clearInsertedElementSelection(pendingInsertedElementSelection);
+			return;
+		}
+
 		const matchesInsertedNodePath = (track: TimelineTrackData) =>
 			pendingInsertedElementSelection.nodePath === null ||
 			(track.nodePathInfo !== null &&
@@ -818,9 +825,24 @@ const TimelineInner: React.FC = () => {
 			return;
 		}
 
+		const effectIndex = effect?.index ?? null;
+		if (effectIndex !== null && !insertedTrack.sequence.effects[effectIndex])
+			return;
+
 		currentSelection.current.selectItems(
-			[{type: 'sequence', nodePathInfo: insertedTrack.nodePathInfo}],
-			{reveal: true},
+			[
+				effectIndex === null
+					? {type: 'sequence', nodePathInfo: insertedTrack.nodePathInfo}
+					: {
+							type: 'sequence-effect',
+							i: effectIndex,
+							nodePathInfo: {
+								...insertedTrack.nodePathInfo,
+								auxiliaryKeys: ['effects', String(effectIndex)],
+							},
+						},
+			],
+			{reveal: true, revealInInspector: effectIndex !== null},
 		);
 		clearInsertedElementSelection(pendingInsertedElementSelection);
 		if (pendingInsertedElementSelection.notification !== null) {

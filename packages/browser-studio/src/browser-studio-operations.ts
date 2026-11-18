@@ -1368,6 +1368,7 @@ export const createBrowserStudioOperations = ({
 					props: request.effectConfig,
 					importPath: request.effectImportPath,
 					importName: request.effectName,
+					wrapInHtmlInCanvas: request.wrapInHtmlInCanvas,
 					node: {
 						filePath: absolutePath,
 						nodePath: request.sequenceNodePath.nodePath,
