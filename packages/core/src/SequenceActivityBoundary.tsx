@@ -103,15 +103,18 @@ export const SequenceActivityBoundary: React.FC<{
 		throw new Error('TimelineContext is missing');
 	}
 
-	const {audioAndVideoTags} = timeline;
+	const {audioAndVideoTags, clientAudioVideoEnabled} = timeline;
 	const dormantTimeline = useMemo<TimelineContextValue>(
 		() => ({
 			frame: {[id]: frame},
 			isPlaying: () => false,
 			isInsideFreeze: true,
+			clientAudioOutputFrame: null,
+			clientAudioSampleFrame: null,
+			clientAudioVideoEnabled,
 			audioAndVideoTags,
 		}),
-		[audioAndVideoTags, frame, id],
+		[audioAndVideoTags, clientAudioVideoEnabled, frame, id],
 	);
 
 	// Keep the providers and Activity at the same position when activating a

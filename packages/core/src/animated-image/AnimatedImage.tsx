@@ -37,7 +37,7 @@ import {SequenceContext} from '../SequenceContext.js';
 import {useCropStyle} from '../use-crop-style.js';
 import {useCurrentFrame} from '../use-current-frame.js';
 import {useDelayRender} from '../use-delay-render.js';
-import {useVideoEnabled} from '../use-media-enabled.js';
+import {useVideoEnabled, useVisualLoadEnabled} from '../use-media-enabled.js';
 import {useMotionBlurCanvas} from '../use-motion-blur-canvas.js';
 import {usePremounting} from '../use-premounting.js';
 import {useVideoConfig} from '../use-video-config.js';
@@ -107,6 +107,8 @@ const AnimatedImageContent = forwardRef<
 		const activeDecoderRef = useRef<RemotionImageDecoder | null>(null);
 		const {delayRender, continueRender, cancelRender} = useDelayRender();
 
+		const videoEnabled = useVideoEnabled();
+		const visualLoadEnabled = useVisualLoadEnabled();
 		const frame = useCurrentFrame();
 		const {fps} = useVideoConfig();
 		const currentTime = getCurrentTime({frame, playbackRate, fps});
@@ -137,6 +139,8 @@ const AnimatedImageContent = forwardRef<
 		const [initialLoopBehavior] = useState(() => loopBehavior);
 
 		useLayoutEffect(() => {
+			if (!visualLoadEnabled) return;
+
 			const decodeHandle = delayRender(
 				`Rendering <AnimatedImage/> with src="${resolvedSrc}"`,
 			);
@@ -198,6 +202,7 @@ const AnimatedImageContent = forwardRef<
 				continueRenderOnce();
 			};
 		}, [
+			visualLoadEnabled,
 			resolvedSrc,
 			onError,
 			requestInitKey,
@@ -211,6 +216,7 @@ const AnimatedImageContent = forwardRef<
 			// Activity and Suspense can retain state after cleaning up effects.
 			// Wait for the current loading effect to publish a live decoder.
 			if (
+				!videoEnabled ||
 				!imageDecoder ||
 				!decodedImage ||
 				activeDecoderRef.current !== imageDecoder
@@ -263,6 +269,7 @@ const AnimatedImageContent = forwardRef<
 			};
 		}, [
 			currentTime,
+			videoEnabled,
 			imageDecoder,
 			decodedImage,
 			loopBehavior,
@@ -531,6 +538,7 @@ const AnimatedImageComponent = (
 	},
 ) => {
 	const videoEnabled = useVideoEnabled();
+	const lastVideoContent = useRef<React.ReactElement | null>(null);
 	const parentSequence = useContext(SequenceContext);
 	const sourceStack = props.controls
 		? getStackForControls(props.controls)
@@ -576,12 +584,10 @@ const AnimatedImageComponent = (
 		forwardedRef: props.ref ?? null,
 		onVideoFrame: null,
 	});
-	if (videoEnabled === false) {
-		return null;
-	}
+	if (videoEnabled === false) return lastVideoContent.current;
 
 	if (!motionBlur.primary) {
-		return (
+		lastVideoContent.current = (
 			<AnimatedImageInner
 				{...props}
 				ref={motionBlur.canvasRef}
@@ -590,12 +596,10 @@ const AnimatedImageComponent = (
 				durationInFrames={props.loop ? undefined : props.durationInFrames}
 			/>
 		);
-	}
-
-	if (props.loop && props.durationInFrames === undefined) {
+	} else if (props.loop && props.durationInFrames === undefined) {
 		const resolvedSrc = resolveAnimatedImageSource(props.src);
 		const requestInitKey = serializeRequestInit(props.requestInit);
-		return (
+		lastVideoContent.current = (
 			<AnimatedImageWithIntrinsicDuration
 				{...props}
 				key={`${resolvedSrc}-${requestInitKey}-${props.trimBefore ?? 0}`}
@@ -603,15 +607,17 @@ const AnimatedImageComponent = (
 				motionBlur={motionBlur}
 			/>
 		);
+	} else {
+		lastVideoContent.current = (
+			<AnimatedImageInner
+				{...props}
+				ref={motionBlur.canvasRef}
+				motionBlur={motionBlur}
+			/>
+		);
 	}
 
-	return (
-		<AnimatedImageInner
-			{...props}
-			ref={motionBlur.canvasRef}
-			motionBlur={motionBlur}
-		/>
-	);
+	return lastVideoContent.current;
 };
 
 export const AnimatedImage = withInteractivitySchema({

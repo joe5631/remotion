@@ -11,7 +11,12 @@ type PendingAudioFrame = {
 
 type PitchShiftState = {
 	shifter: StreamingPitchShifter;
-	pending: {frame: PendingAudioFrame; written: number}[];
+	pending: {
+		frame: PendingAudioFrame;
+		written: number;
+		start: number;
+		length: number;
+	}[];
 };
 
 // A shifter may need input from later video frames before it can finish an
@@ -34,8 +39,7 @@ export const createAudioMixer = ({
 		let offset = 0;
 		while (offset < output[0].length) {
 			const pending = state.pending[0];
-			const frameLength =
-				pending.frame.mixed.length / TARGET_NUMBER_OF_CHANNELS;
+			const frameLength = pending.length;
 			const count = Math.min(
 				frameLength - pending.written,
 				output[0].length - offset,
@@ -43,7 +47,8 @@ export const createAudioMixer = ({
 			for (let i = 0; i < count; i++) {
 				for (let channel = 0; channel < TARGET_NUMBER_OF_CHANNELS; channel++) {
 					pending.frame.mixed[
-						(pending.written + i) * TARGET_NUMBER_OF_CHANNELS + channel
+						(pending.start + pending.written + i) * TARGET_NUMBER_OF_CHANNELS +
+							channel
 					] += output[channel][offset + i] * 32768;
 				}
 			}
@@ -61,10 +66,12 @@ export const createAudioMixer = ({
 		addFrame: ({
 			assets,
 			timestamp,
+			outputFrame,
 			isLastFrame,
 		}: {
 			assets: TRenderAsset[];
 			timestamp: number;
+			outputFrame: number | null;
 			isLastFrame: boolean;
 		}) => {
 			const inlineAudio = assets.filter(
@@ -80,9 +87,16 @@ export const createAudioMixer = ({
 
 			// Round sample boundaries cumulatively so fractional samples per video
 			// frame do not accumulate into audio/video drift.
-			const numberOfFrames =
-				Math.round(((frameIndex + 1) * sampleRate) / fps) -
-				Math.round((frameIndex * sampleRate) / fps);
+			const samplesPerFrame = sampleRate / fps;
+			const firstSample =
+				outputFrame === null
+					? Math.round((frameIndex * sampleRate) / fps)
+					: Math.round(outputFrame * samplesPerFrame);
+			const endSample =
+				outputFrame === null
+					? Math.round(((frameIndex + 1) * sampleRate) / fps)
+					: Math.round((outputFrame + 1) * samplesPerFrame);
+			const numberOfFrames = endSample - firstSample;
 			frameIndex++;
 			const frame: PendingAudioFrame = {
 				timestamp,
@@ -103,13 +117,25 @@ export const createAudioMixer = ({
 				}
 
 				toneFrequencies.set(asset.id, asset.toneFrequency);
+				const start =
+					asset.startSample === null ? 0 : asset.startSample - firstSample;
+				const length =
+					asset.startSample === null
+						? numberOfFrames
+						: Math.min(
+								asset.audio.length / TARGET_NUMBER_OF_CHANNELS,
+								numberOfFrames - start,
+							);
+				if (length <= 0) continue;
 				if (asset.toneFrequency === 1) {
 					for (
 						let i = 0;
-						i < Math.min(asset.audio.length, frame.mixed.length);
+						i <
+						Math.min(asset.audio.length, length * TARGET_NUMBER_OF_CHANNELS);
 						i++
 					) {
-						frame.mixed[i] += asset.audio[i];
+						frame.mixed[start * TARGET_NUMBER_OF_CHANNELS + i] +=
+							asset.audio[i];
 					}
 
 					continue;
@@ -131,8 +157,8 @@ export const createAudioMixer = ({
 				const planar = Array.from(
 					{length: TARGET_NUMBER_OF_CHANNELS},
 					(_, channel) => {
-						const data = new Float32Array(numberOfFrames);
-						for (let i = 0; i < numberOfFrames; i++) {
+						const data = new Float32Array(length);
+						for (let i = 0; i < length; i++) {
 							data[i] =
 								(asset.audio[i * TARGET_NUMBER_OF_CHANNELS + channel] ?? 0) /
 								32768;
@@ -142,7 +168,7 @@ export const createAudioMixer = ({
 					},
 				);
 				frame.pendingAssets++;
-				state.pending.push({frame, written: 0});
+				state.pending.push({frame, written: 0, start, length});
 				mixShiftedOutput(state, state.shifter.append(planar));
 			}
 

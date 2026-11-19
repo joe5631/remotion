@@ -20,6 +20,9 @@ const getForFrame = (frame: number, content: React.ReactNode) => {
 					},
 					isPlaying: () => false,
 					isInsideFreeze: false,
+					clientAudioOutputFrame: null,
+					clientAudioSampleFrame: null,
+					clientAudioVideoEnabled: null,
 					audioAndVideoTags: {
 						current: [],
 					},
@@ -258,6 +261,9 @@ test('Sequence freeze pins the child frame without remounting the sequence', () 
 					},
 					isPlaying: () => false,
 					isInsideFreeze: false,
+					clientAudioOutputFrame: null,
+					clientAudioSampleFrame: null,
+					clientAudioVideoEnabled: null,
 					audioAndVideoTags: {
 						current: [],
 					},
@@ -280,6 +286,9 @@ test('Sequence freeze pins the child frame without remounting the sequence', () 
 					},
 					isPlaying: () => false,
 					isInsideFreeze: false,
+					clientAudioOutputFrame: null,
+					clientAudioSampleFrame: null,
+					clientAudioVideoEnabled: null,
 					audioAndVideoTags: {
 						current: [],
 					},

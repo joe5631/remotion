@@ -95,6 +95,9 @@ const ThumbnailFn = <
 
 	const timelineState: TimelineContextValue = useMemo(() => {
 		const value: TimelineContextValue = {
+			clientAudioOutputFrame: null,
+			clientAudioSampleFrame: null,
+			clientAudioVideoEnabled: null,
 			isPlaying: () => false,
 			isInsideFreeze: false,
 			frame: {

@@ -77,7 +77,7 @@ export const Freeze: React.FC<FreezeProps> = ({
 
 	const relativeFrom = sequenceContext?.relativeFrom ?? 0;
 	const playbackRate = sequenceContext?.playbackRate ?? 1;
-	const {audioAndVideoTags} = timelineContext;
+	const {audioAndVideoTags, clientAudioVideoEnabled} = timelineContext;
 
 	// Advancing the outer timeline must not invalidate the frozen clock.
 	const frozenTimelineValue: TimelineContextValue = useMemo(() => {
@@ -85,12 +85,16 @@ export const Freeze: React.FC<FreezeProps> = ({
 			audioAndVideoTags,
 			isPlaying: () => false,
 			isInsideFreeze: true,
+			clientAudioOutputFrame: null,
+			clientAudioSampleFrame: null,
+			clientAudioVideoEnabled,
 			frame: {
 				[videoConfig.id]: frameToFreeze / playbackRate + relativeFrom,
 			},
 		};
 	}, [
 		audioAndVideoTags,
+		clientAudioVideoEnabled,
 		videoConfig.id,
 		frameToFreeze,
 		relativeFrom,

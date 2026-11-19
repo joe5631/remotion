@@ -1,7 +1,6 @@
 import {
 	forwardRef,
 	useContext,
-	useImperativeHandle,
 	useLayoutEffect,
 	useMemo,
 	useReducer,
@@ -37,7 +36,7 @@ import {truncateSrcForLabel} from '../truncate-src-for-label.js';
 import {useBufferState} from '../use-buffer-state.js';
 import {useCropStyle} from '../use-crop-style.js';
 import {useDelayRender} from '../use-delay-render.js';
-import {useVideoEnabled} from '../use-media-enabled.js';
+import {useVideoEnabled, useVisualLoadEnabled} from '../use-media-enabled.js';
 import {usePremounting} from '../use-premounting.js';
 import {withInteractivitySchema} from '../with-interactivity-schema.js';
 import type {LoadedImage} from './canvas-image-load-state.js';
@@ -253,6 +252,8 @@ const CanvasImageContent = forwardRef<
 		ref,
 	) => {
 		const {delayRender, continueRender, cancelRender} = useDelayRender();
+		const videoEnabled = useVideoEnabled();
+		const visualLoadEnabled = useVisualLoadEnabled();
 		const {delayPlayback} = useBufferState();
 		const [outputCanvas, setOutputCanvas] = useState<HTMLCanvasElement | null>(
 			null,
@@ -320,6 +321,8 @@ const CanvasImageContent = forwardRef<
 		]);
 
 		useLayoutEffect(() => {
+			if (!visualLoadEnabled) return;
+
 			const handle = delayRender(
 				`Rendering <CanvasImage> with src="${truncateSrcForLabel(actualSrc)}"`,
 				{
@@ -384,6 +387,7 @@ const CanvasImageContent = forwardRef<
 				releasePendingLoadDelay();
 			};
 		}, [
+			visualLoadEnabled,
 			actualSrc,
 			cancelRender,
 			releasePendingLoadDelay,
@@ -395,7 +399,7 @@ const CanvasImageContent = forwardRef<
 		]);
 
 		useLayoutEffect(() => {
-			if (!loadedImage || !outputCanvas || !sourceCanvas) {
+			if (!videoEnabled || !loadedImage || !outputCanvas || !sourceCanvas) {
 				return;
 			}
 
@@ -511,6 +515,7 @@ const CanvasImageContent = forwardRef<
 			fit,
 			height,
 			loadedImage,
+			videoEnabled,
 			memoizedEffects,
 			outputCanvas,
 			sourceCanvas,
@@ -593,12 +598,8 @@ const CanvasImageInner = forwardRef<
 		);
 
 		const memoizedEffectDefinitions = useMemoizedEffectDefinitions(effects);
-		const actualRef = useRef<HTMLCanvasElement | null>(null);
 		const videoEnabled = useVideoEnabled();
-		// No canvas is mounted during audio-only frames; it remounts afterwards.
-		useImperativeHandle(ref, () => {
-			return (videoEnabled ? actualRef.current : null) as HTMLCanvasElement;
-		}, [videoEnabled]);
+		const lastVideoContent = useRef<React.ReactElement | null>(null);
 		const {
 			effectivePostmountFor,
 			effectivePremountFor,
@@ -630,11 +631,9 @@ const CanvasImageInner = forwardRef<
 			componentName: _remotionInternalCropComponentName ?? '<CanvasImage />',
 		});
 
-		if (videoEnabled === false) {
-			return null;
-		}
+		if (videoEnabled === false) return lastVideoContent.current;
 
-		return (
+		lastVideoContent.current = (
 			<Freeze
 				frame={freezeFrame}
 				active={isPremountingOrPostmounting}
@@ -664,7 +663,7 @@ const CanvasImageInner = forwardRef<
 				>
 					<SequenceContent>
 						<CanvasImageContent
-							ref={actualRef}
+							ref={ref}
 							src={src}
 							crossOrigin={crossOrigin}
 							width={width}
@@ -689,6 +688,7 @@ const CanvasImageInner = forwardRef<
 				</Sequence>
 			</Freeze>
 		);
+		return lastVideoContent.current;
 	},
 );
 

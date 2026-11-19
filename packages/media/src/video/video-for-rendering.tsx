@@ -28,6 +28,7 @@ import {applyVolume} from '../convert-audiodata/apply-volume';
 import {frameForVolumeProp} from '../looped-frame';
 import {type MediaOnError, callOnErrorAndResolve} from '../on-error';
 import {ProResDecoderNotEnabledError} from '../prores-error';
+import {useRenderingAudioWindow} from '../rendering-audio-window';
 import type {MediaRequestInit} from '../request-init';
 import {extractFrameViaBroadcastChannel} from '../video-extraction/extract-frame-via-broadcast-channel';
 import type {
@@ -119,6 +120,9 @@ export const VideoForRendering: React.FC<InnerVideoProps> = ({
 	const startsAt = Internals.useMediaStartsAt();
 	const sequenceContext = useContext(Internals.SequenceContext);
 	const sequencePlaybackRate = sequenceContext?.playbackRate ?? 1;
+	const audioWindow = useRenderingAudioWindow({frame, fps, sampleRate});
+	const [instanceId] = useState(() => String(Math.random()));
+	const clientId = audioWindow.startSample === null ? '' : instanceId;
 	const startInVideo = sequenceContext
 		? sequenceContext.cumulatedFrom + sequenceContext.relativeFrom
 		: 0;
@@ -129,12 +133,13 @@ export const VideoForRendering: React.FC<InnerVideoProps> = ({
 		() =>
 			`media-video-${random(
 				src,
-			)}-${sequenceContext?.cumulatedFrom}-${sequenceContext?.relativeFrom}-${sequenceContext?.durationInFrames}`,
+			)}-${sequenceContext?.cumulatedFrom}-${sequenceContext?.relativeFrom}-${sequenceContext?.durationInFrames}${clientId}`,
 		[
 			src,
 			sequenceContext?.cumulatedFrom,
 			sequenceContext?.relativeFrom,
 			sequenceContext?.durationInFrames,
+			clientId,
 		],
 	);
 
@@ -211,8 +216,10 @@ export const VideoForRendering: React.FC<InnerVideoProps> = ({
 			);
 		}
 
-		const timestamp = frame / sequencePlaybackRate / fps;
-		const durationInSeconds = 1 / fps;
+		const {timestamp, durationInSeconds} = audioWindow;
+		if (audioWindow.sampleCount === 0 && !videoEnabled) {
+			return;
+		}
 
 		let cancelled = false;
 		const newHandle = delayRender(
@@ -231,11 +238,12 @@ export const VideoForRendering: React.FC<InnerVideoProps> = ({
 		extractFrameViaBroadcastChannel({
 			sampleRate,
 			src,
-			timeInSeconds: timestamp,
+			timeInSeconds: frame / sequencePlaybackRate / fps,
+			audioTimeInSeconds: timestamp,
 			durationInSeconds,
 			playbackRate: playbackRate * sequencePlaybackRate,
 			logLevel,
-			includeAudio: shouldUseAudio,
+			includeAudio: shouldUseAudio && audioWindow.sampleCount !== 0,
 			includeVideo: videoEnabled,
 			isClientSideRendering: environment.isClientSideRendering,
 			loop,
@@ -444,9 +452,12 @@ export const VideoForRendering: React.FC<InnerVideoProps> = ({
 					applyVolume(audio.data, volume);
 					registerRenderAsset({
 						type: 'inline-audio',
+						startSample: audioWindow.startSample,
 						id,
 						audio: environment.isClientSideRendering
-							? audio.data
+							? audioWindow.sampleCount === null
+								? audio.data
+								: audio.data.subarray(0, audioWindow.sampleCount * 2)
 							: Array.from(audio.data),
 						frame: absoluteFrame,
 						startInVideo,
@@ -477,6 +488,7 @@ export const VideoForRendering: React.FC<InnerVideoProps> = ({
 		};
 	}, [
 		sampleRate,
+		audioWindow,
 		absoluteFrame,
 		continueRender,
 		delayRender,
